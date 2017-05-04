@@ -28,13 +28,18 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.text.Layout;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import org.w3c.dom.Text;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,6 +59,8 @@ public class MainActivity extends Activity
     private TextView mOutputText;
     private Button mCallApiButton;
     ProgressDialog mProgress;
+    private LinearLayout activityLayout;
+    private List<Event> items;
 
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
@@ -62,18 +69,19 @@ public class MainActivity extends Activity
 
     private static final String BUTTON_TEXT = "Call Google Calendar API";
     private static final String PREF_ACCOUNT_NAME = "accountName";
-    private static final String[] SCOPES = { CalendarScopes.CALENDAR_READONLY };
+    private static final String[] SCOPES = {CalendarScopes.CALENDAR_READONLY};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        LinearLayout activityLayout = new LinearLayout(this);
+        activityLayout = new LinearLayout(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT);
         activityLayout.setLayoutParams(lp);
         activityLayout.setOrientation(LinearLayout.VERTICAL);
         activityLayout.setPadding(16, 16, 16, 16);
+
 
         ViewGroup.LayoutParams tlp = new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -98,7 +106,7 @@ public class MainActivity extends Activity
         mOutputText.setVerticalScrollBarEnabled(true);
         mOutputText.setMovementMethod(new ScrollingMovementMethod());
         mOutputText.setText(
-                "Click the \'" + BUTTON_TEXT +"\' button to test the API.");
+                "Click the \'" + BUTTON_TEXT + "\' button to test the API.");
         activityLayout.addView(mOutputText);
 
         mProgress = new ProgressDialog(this);
@@ -113,12 +121,12 @@ public class MainActivity extends Activity
     }
 
     private void getResultsFromApi() {
-        if (! isGooglePlayServicesAvailable()) {
+        if (!isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
         } else if (mCredential.getSelectedAccountName() == null) {
             chooseAccount();
-        } else if (! isDeviceOnline()) {
-            mOutputText.setText("No network connection available.");
+        } else if (!isDeviceOnline()) {
+            Toast.makeText(this, "No network connection available.", Toast.LENGTH_LONG).show();
         } else {
             new MakeRequestTask(mCredential).execute();
         }
@@ -153,12 +161,12 @@ public class MainActivity extends Activity
     protected void onActivityResult(
             int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        switch(requestCode) {
+        switch (requestCode) {
             case REQUEST_GOOGLE_PLAY_SERVICES:
                 if (resultCode != RESULT_OK) {
-                    mOutputText.setText(
-                            "This app requires Google Play Services. Please install " +
-                                    "Google Play Services on your device and relaunch this app.");
+                    Toast.makeText(this, "This app requires Google Play Services. Please install\n" +
+                                    "Google Play Services on your device and relaunch this app.",
+                            Toast.LENGTH_LONG).show();
                 } else {
                     getResultsFromApi();
                 }
@@ -275,7 +283,7 @@ public class MainActivity extends Activity
                     .setOrderBy("startTime")
                     .setSingleEvents(true)
                     .execute();
-            List<Event> items = events.getItems();
+            items = events.getItems();
 
             for (Event event : items) {
                 DateTime start = event.getStart().getDateTime();
@@ -284,8 +292,8 @@ public class MainActivity extends Activity
                     // the start date.
                     start = event.getStart().getDate();
                 }
-                eventStrings.add(
-                        String.format("%s (%s)", event.getSummary(), start));
+//                eventStrings.add(
+//                        String.format("%s (%s)", event.getSummary(), start));
             }
             return eventStrings;
         }
@@ -299,11 +307,44 @@ public class MainActivity extends Activity
         @Override
         protected void onPostExecute(List<String> output) {
             mProgress.hide();
-            if (output == null || output.size() == 0) {
+            /*if (output == null || output.size() == 0) {
                 mOutputText.setText("No results returned.");
-            } else {
+            } else */{
                 output.add(0, "Data retrieved using the Google Calendar API:");
                 mOutputText.setText(TextUtils.join("\n", output));
+                for (Event event : items) {
+                    LayoutInflater layoutInflater = getLayoutInflater();
+                    final LinearLayout itemLayout = (LinearLayout) layoutInflater.inflate(
+                            R.layout.calendar_list_item,
+                            activityLayout,
+                            false);
+                    final TextView itemText = (TextView) itemLayout.findViewById(R.id.event_title);
+                    itemText.setText(event.getSummary());
+                    itemLayout.setOnClickListener(
+                            new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    Event event = new Event();
+                                    for (Event e : items){
+                                        if (e.getSummary() == itemText.getText()){
+                                            event = e;
+                                        }
+                                    }
+                                    DateTime start = event.getStart().getDateTime();
+                                    if (start == null){
+                                        start = event.getStart().getDate();
+                                    }
+                                    Intent intent = new Intent(MainActivity.this, EventActivity.class);
+                                    intent.putExtra("title", event.getSummary());
+                                    intent.putExtra("description", event.getDescription());
+                                    intent.putExtra("location", event.getLocation());
+                                    intent.putExtra("time", String.format("%s",start));
+                                    startActivity(intent);
+                                }
+                            }
+                    );
+                    activityLayout.addView(itemLayout);
+                }
             }
         }
 
